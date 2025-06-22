@@ -11,6 +11,7 @@
 # 4. 'log-level': An argument for the 'lint' command to set the log level. Possible values are 'debug', 'info', 'warning', or 'error'.
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -20,7 +21,10 @@ def convert_args_to_run_cmake_tool(args):
     apply = args.apply.lower() == 'true'
     log_level = args.log_level
 
-    subprocess_arguments = [sys.executable, "run_cmake_tool.py"]
+    run_cmake_tool_dir = os.environ.get('RUN_CMAKE_TOOL_DIR', '.')
+    run_cmake_tool_path = os.path.join(run_cmake_tool_dir, 'run_cmake_tool.py')
+
+    subprocess_arguments = [sys.executable, run_cmake_tool_path]
 
     if command == 'format':
         print(f"Running format on path: {path} with apply: {apply}")

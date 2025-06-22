@@ -42,6 +42,7 @@ COPY run_cmake_tool.py github_action_entrypoint.py ./
 # Add virtual environment runtime directory to PATH.
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH=/app/.venv/bin:$PATH
+ENV RUN_CMAKE_TOOL_DIR=/app
 
 # Set the cmake tools launcher script as entrypoint.
 ENTRYPOINT [ "python", "run_cmake_tool.py" ]
