@@ -20,7 +20,7 @@ runs:
   image: Dockerfile
   entrypoint: python
   args:
-    - github_action_entrypoint.py
+    - /app/github_action_entrypoint.py
     - ${{ inputs.command }}
     - ${{ inputs.path }}
     - ${{ inputs.apply-formatting }}

@@ -37,7 +37,7 @@ WORKDIR /app
 COPY --from=build /app/.venv ./.venv
 
 # Copy utility scripts.
-COPY run_cmake_tool.py ./
+COPY run_cmake_tool.py github_action_entrypoint.py ./
 
 # Add virtual environment runtime directory to PATH.
 ENV VIRTUAL_ENV=/app/.venv
