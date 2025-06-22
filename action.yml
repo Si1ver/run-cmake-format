@@ -14,12 +14,13 @@ inputs:
   lint-log-level:
     description: "The log level for cmake-lint. Possible values are 'debug', 'info', 'warning', or 'error'. Only relevant for the 'lint' command."
     required: false
-    default: 'warning'
+    default: warning
 runs:
   using: docker
   image: Dockerfile
-  entrypoint: python github_action_entrypoint.py
+  entrypoint: python
   args:
+    - github_action_entrypoint.py
     - ${{ inputs.command }}
     - ${{ inputs.path }}
     - ${{ inputs.apply-formatting }}
