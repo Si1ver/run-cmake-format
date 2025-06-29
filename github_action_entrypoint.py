@@ -1,89 +1,256 @@
-# This script converts arguments from a GitHub Actions workflow into a format suitable for the run_cmake_tool.py script.
-# GitHub Actions does not support conditional logic in the workflow file,
-# so argument transformation must be handled manually.
-# This conversion is separated from the main script to allow its reuse outside of GitHub Actions.
-#
-# Argument list:
-# This script accepts exactly four required arguments:
-# 1. 'command': The command to run. Possible values are 'format' or 'lint'.
-# 2. 'path': The starting directory path for the command.
-# 3. 'apply': A flag for the 'format' command to apply changes. Possible values are 'true' or 'false'.
-# 4. 'log-level': An argument for the 'lint' command to set the log level. Possible values are 'debug', 'info', 'warning', or 'error'.
+"""
+This script transforms GitHub Actions job arguments into a format compatible with the run cmake tool script.
+
+Argument conversion is handled in Python due to the limited conditional logic available in GitHub Actions workflow
+files.
+"""
+
+__version__ = "0.1.0b1"
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
+from collections import namedtuple
+from enum import Enum
+from typing import assert_never
 
-def convert_args_to_run_cmake_tool(args):
-    command = args.command
-    path = args.path
-    apply = args.apply.lower() == 'true'
-    log_level = args.log_level
+# To avoid debugging issues with older Python versions, the script requires Python 3.12 or higher.
+if sys.version_info < (3, 12):
+    print("This script requires Python 3.12 or higher")
+    sys.exit(1)
 
-    run_cmake_tool_dir = os.environ.get('RUN_CMAKE_TOOL_DIR', '.')
-    run_cmake_tool_path = os.path.join(run_cmake_tool_dir, 'run_cmake_tool.py')
+# The run cmake tool script name.
+RUN_CMAKE_TOOL_SCRIPT_NAME: str = "run_cmake_tool.py"
 
-    subprocess_arguments = [sys.executable, run_cmake_tool_path]
+# Environment variable name for the directory containing the run cmake tool script.
+RUN_CMAKE_TOOL_DIR_ENV_VAR: str = "RUN_CMAKE_TOOL_DIR"
 
-    if command == 'format':
-        print(f"Running format on path: {path} with apply: {apply}")
 
-        subprocess_arguments.append("format")
-        if apply:
-            subprocess_arguments.append("--apply")
+# Named tuple for logging options.
+LoggingOptions = namedtuple("LoggingOptions", ["verbose", "quiet"])
 
-        subprocess_arguments.append(path)
 
-        print(f"Subprocess arguments: {subprocess_arguments}")
-        print("===========================")
+class ExitCodes(int, Enum):
+    """
+    Exit codes for the script.
+    """
 
-        try:
-            result = subprocess.run(subprocess_arguments, check=False)
-            return result.returncode
+    TOOL_SCRIPT_NOT_FOUND = 101
+    FAILED_TO_RUN_TOOL_SCRIPT = 102
 
-        except Exception as e:
-            print(f"Error: An exception occurred while calling run_cmake_tool.py: {e}")
-            return 1
 
-    elif command == 'lint':
-        print(f"Running lint on path: {path} with log level: {log_level}")
+class Command(str, Enum):
+    """
+    Commands for the run cmake tool script.
+    """
 
-        subprocess_arguments.extend(["lint", "--log-level", log_level, path])
+    FORMAT = "format"
+    LINT = "lint"
 
-        print(f"Subprocess arguments: {subprocess_arguments}")
-        print("===========================")
 
-        try:
-            result = subprocess.run(subprocess_arguments, check=False)
-            return result.returncode
+class LogLevel(str, Enum):
+    """
+    Log levels for the lint command of run cmake tool script.
+    """
 
-        except Exception as e:
-            print(f"Error: An exception occurred while calling run_cmake_tool.py: {e}")
-            return 1
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
 
+
+def get_run_cmake_tool_script_path() -> str:
+    """
+    Composes the path to the run cmake tool script.
+
+    Returns:
+        str: The path to the script.
+    """
+
+    run_cmake_tool_dir: str = os.environ.get(RUN_CMAKE_TOOL_DIR_ENV_VAR, ".")
+    return os.path.join(run_cmake_tool_dir, RUN_CMAKE_TOOL_SCRIPT_NAME)
+
+
+def run_cmake_tool_script(command_and_arguments: list[str], logging_options: LoggingOptions) -> int:
+    """
+    Runs the run cmake tool script with the provided command and arguments.
+
+    Args:
+        command_and_arguments (list[str]): The command and its arguments to run.
+        logging_options (LoggingOptions): Options for logging output.
+
+    Returns:
+        int: Exit code from the executed tool, or a non-zero value for execution errors.
+    """
+
+    run_cmake_tool_path: str = get_run_cmake_tool_script_path()
+    if not os.path.isfile(run_cmake_tool_path):
+        if not logging_options.quiet:
+            print(
+                f"Error: The {RUN_CMAKE_TOOL_SCRIPT_NAME} script was not found at the expected path:"
+                f" {run_cmake_tool_path}"
+            )
+        return ExitCodes.TOOL_SCRIPT_NOT_FOUND
+
+    # Tool script intentionally called using sys.executable to make it run as if it were called directly.
+    subprocess_arguments: list[str] = [sys.executable, run_cmake_tool_path]
+    subprocess_arguments.extend(command_and_arguments)
+
+    if not logging_options.quiet:
+        print(f"Running command: {shlex.join(subprocess_arguments)}")
+
+    try:
+        result = subprocess.run(subprocess_arguments, check=False)
+        return result.returncode
+
+    except subprocess.SubprocessError as ex:
+        if not logging_options.quiet:
+            print(f"Error: An exception occurred while calling run_cmake_tool.py: {ex}")
+        return ExitCodes.FAILED_TO_RUN_TOOL_SCRIPT
+
+
+def convert_args_to_run_cmake_tool(args: argparse.Namespace) -> int:
+    """
+    Converts GitHub Actions job arguments into a format suitable for the run cmake tool script.
+
+    Args:
+        args (argparse.Namespace): The parsed command line arguments.
+
+    Returns:
+        int: Exit code from the executed tool, or a non-zero value for execution errors.
+    """
+
+    logging_options = LoggingOptions(verbose=args.verbose and not args.quiet, quiet=args.quiet)
+
+    if logging_options.verbose:
+        print(f"Running entrypoint script for {RUN_CMAKE_TOOL_SCRIPT_NAME} v.{__version__}")
+
+    command: Command = args.command
+    path: str = args.path
+
+    match command:
+        case Command.FORMAT:
+            apply: bool = args.apply
+
+            if logging_options.verbose:
+                print(f"Running format on path: {path} with apply: {apply}")
+
+            format_subprocess_arguments: list[str] = ["format"]
+            if apply:
+                format_subprocess_arguments.append("--apply")
+            format_subprocess_arguments.append(path)
+
+            return run_cmake_tool_script(format_subprocess_arguments, logging_options)
+
+        case Command.LINT:
+            log_level: LogLevel = args.log_level
+
+            if logging_options.verbose:
+                print(f"Running lint on path: {path} with log level: {log_level.value}")
+
+            lint_subprocess_arguments: list[str] = ["lint", "--log-level", log_level.value, path]
+
+            return run_cmake_tool_script(lint_subprocess_arguments, logging_options)
+
+        # This case is unreachable because all possible commands are handled.
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def convert_bool_argument(arg: str) -> bool:
+    """
+    Converts a string argument to a boolean value.
+
+    Args:
+        arg (str): The string argument to convert.
+
+    Returns:
+        bool: The converted boolean value.
+    """
+
+    if arg.lower() in ("true", "1"):
+        return True
+    elif arg.lower() in ("false", "0"):
+        return False
     else:
-        print(f"Error: Unknown command: {command}")
-        return 1
+        raise argparse.ArgumentTypeError(f"Invalid boolean argument: '{arg}' is not 'true' or 'false'.")
 
-def main():
-    print("Processing GitHub Actions inputs for run_cmake_tool.py")
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """
+    Creates an argument parser for the script.
+
+    Returns:
+        argparse.ArgumentParser: The argument parser instance.
+    """
 
     parser = argparse.ArgumentParser(
-                        prog='github_action_entrypoint',
-                        description='This script converts GitHub Actions arguments into a format suitable for run_cmake_tool.py.')
+        prog="github_action_entrypoint",
+        description=(
+            "This script converts GitHub Actions job arguments into a format suitable for"
+            f" {RUN_CMAKE_TOOL_SCRIPT_NAME}."
+        ),
+    )
 
-    parser.add_argument("command", help="The command to run. Possible values are 'format' or 'lint'.", choices=['format', 'lint'])
-    parser.add_argument("path", help="The path to the project directory to format or lint. CMake files will be searched recursively in this directory.")
-    parser.add_argument("apply", help="Whether to apply formatting changes. Possible values are 'true' or 'false'.", choices=['true', 'false'])
-    parser.add_argument("log_level", help="The log level for cmake-lint. Possible values are 'debug', 'info', 'warning', or 'error'.", choices=['debug', 'info', 'warning', 'error'])
+    parser.add_argument(
+        "command",
+        type=Command,
+        choices=list(Command),
+        help="The command to run. Possible values: 'format', 'lint'.",
+    )
+    parser.add_argument(
+        "path",
+        type=str,
+        help=(
+            "The path to the project directory to format or lint. CMake files will be searched recursively in this"
+            " directory."
+        ),
+    )
+    parser.add_argument(
+        "apply",
+        type=convert_bool_argument,
+        help=(
+            "Whether to apply formatting changes. Values: 'true', 'false'. If 'true', changes will be written to files."
+            " Only relevant for the 'format' command."
+        ),
+    )
+    parser.add_argument(
+        "log_level",
+        type=LogLevel,
+        choices=list(LogLevel),
+        help=(
+            "The log level for cmake-lint. Possible values are 'debug', 'info', 'warning', or 'error'. Only relevant"
+            " for the 'lint' command."
+        ),
+    )
+
+    parser.add_argument("--verbose", action="store_true", default=False, help="Enable additional logging output.")
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Disable all logging output. This option takes precedence over '--verbose'.",
+    )
 
     parser.set_defaults(func=convert_args_to_run_cmake_tool)
 
-    args = parser.parse_args()
-    exit_code = args.func(args)
+    return parser
 
-    sys.exit(exit_code)
+
+def main() -> int:
+    """
+    Main entry point for the script.
+
+    Returns:
+        int: Exit code from the executed tool, or a non-zero value for execution errors.
+    """
+
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
