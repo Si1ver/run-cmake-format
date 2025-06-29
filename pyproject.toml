@@ -1,0 +1,10 @@
+[project]
+requires-python = ">=3.12"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE.md"]
+
+[tool.black]
+line-length = 120
+# This is enabled to make sure that black do split long strings.
+unstable = true
