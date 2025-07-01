@@ -1,7 +1,7 @@
 """
-A set of tests for the github_action_entrypoint script.
+A helper module for the tests of github_action_entrypoint script.
 
-This module contains common constants used across tests.
+This module contains common constants used across the github_action_entrypoint tests.
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ import os
 
 @dataclass(frozen=True)
 class Consts:
-    """A class to hold string constants for testing."""
+    """A class to hold constants for testing."""
 
     # Valid string constants.
     COMMAND_FORMAT = "format"

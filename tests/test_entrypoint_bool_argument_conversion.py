@@ -7,7 +7,7 @@ This module contains tests for the conversion of boolean arguments.
 import argparse
 from dataclasses import dataclass
 import pytest
-from test_entrypoint_constants import Consts
+from tests.entrypoint_constants import Consts
 from github_action_entrypoint import convert_bool_argument
 
 

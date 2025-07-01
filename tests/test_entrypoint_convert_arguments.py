@@ -8,7 +8,7 @@ format.
 import argparse
 from dataclasses import dataclass
 import pytest
-from test_entrypoint_constants import Consts
+from tests.entrypoint_constants import Consts
 from github_action_entrypoint import Command, LogLevel, LoggingOptions, convert_args_to_run_cmake_tool
 
 
